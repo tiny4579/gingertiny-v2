@@ -60,8 +60,8 @@ obj-$(CONFIG_MSM_SMD) += htc_port_list.o
 endif
 
 obj-$(CONFIG_ARCH_MSM7X30) += rpc_hsusb.o
-
 obj-y += remote_spinlock.o
+obj-$(CONFIG_MSM_CPU_AVS) += avs.o avs_hw.o
 
 ifdef CONFIG_ARCH_MSM8X60
 quiet_cmd_mkrpcsym = MKCAP   $@

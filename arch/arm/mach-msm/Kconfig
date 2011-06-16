@@ -259,12 +259,27 @@ config ARCH_MSM7630
 
 comment "MSM Board Type"
 
-config MACH_HALIBUT
-	depends on ARCH_MSM7X00A
-	default n
-	bool "Halibut Board (QCT SURF7201A)"
+config QSD_SVS
+	bool "QSD Static Voltage Scaling"
+	depends on (ARCH_MSM_SCORPION)
+	default y
 	help
-	  Support for the Qualcomm SURF7201A eval board.
+	  Enables static voltage scaling using the TPS65023 PMIC.
+
+config QSD_PMIC_DEFAULT_DCDC1
+	int "PMIC default output voltage"
+	depends on (ARCH_MSM_SCORPION)
+	default 1275
+	help
+	  This is the PMIC voltage at Linux kernel boot.
+
+config CACHE_FLUSH_RANGE_LIMIT
+        hex "Cache flush range limit"
+        default 0x40000
+        help
+          When flushing a cache range larger then this (hex) limit, flush the
+          entire cache instead. Flushing a large range can be slower than
+          flushing, then refilling, the entire cache.
 
 config MACH_TROUT
 	depends on ARCH_MSM7X00A
@@ -785,12 +800,19 @@ config KERNEL_PMEM_SMI_REGION
 	help
 	   Enable the in-kernel PMEM allocator to use SMI memory.
 
-config PANEL_SELF_REFRESH
-       depends on (MACH_SPADE || MACH_MECHA)
-       default n
-       bool "Panel Self-refresh"
-       help
-         Support for the board Spade/Mecha Panel Self-refresh.
+config MSM_CPU_AVS
+	bool "Enable Adaptive Voltage Scaling (AVS)"
+	depends on (ARCH_MSM_SCORPION && QSD_SVS)
+	default y
+	help
+	  This enables the Adaptive Voltage Scaling feature of
+	  Qualcomm ARMv7 CPUs. It adjusts the voltage for each frequency
+	  based on feedback from three ring oscillators in the CPU.
+
+config WIFI_CONTROL_FUNC
+        bool "Enable WiFi control function abstraction"
+        help
+          Enables Power/Reset/Carddetect function abstraction
 
 config TROUT_BATTCHG
 	depends on MACH_TROUT && POWER_SUPPLY
