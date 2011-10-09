@@ -30,6 +30,14 @@ config ZRAM_NUM_DEVICES
 	  Select default number of zram devices. You can override this value
 	  using 'num_devices' module parameter.
 
+config ZRAM_DEFAULT_PERCENTAGE
+	int "Default number of zram percentage"
+	depends on ZRAM
+	range 25 80
+	default 25
+	help
+	  Select default zram disk size: percentage of total RAM
+
 config ZRAM_DEBUG
 	bool "Compressed RAM block device debug support"
 	depends on ZRAM
