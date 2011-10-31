@@ -1734,6 +1734,24 @@ static int atmel_ts_probe(struct i2c_client *client,
 		ts->id->matrix_x_size, ts->id->matrix_y_size,
 		ts->id->num_declared_objects);
 
+/*
+        Begin ffolkes multitouch selection
+        Purpose: Some hardware can't support more than 2 or 3 multitouch points. Detect which hardware can support
+  what and enable the correct number of points for that device. If another touch controller is found, keep
+  the default 2 point configuration.
+*/
+        if(ts->id->family_id == 0x4F && ts->id->version == 0x16) {
+                printk(KERN_INFO "3 point multitouch enabled\n");
+                pdata->config_T9[14] = 3;
+        } else if(ts->id->family_id == 0x80 && ts->id->version == 0x16) {
+                printk(KERN_INFO "5 point multitouch enabled - NOTE: Some devices may revert to 2 point\n");
+                pdata->config_T9[14] = 5;
+  	} else
+	        printk(KERN_INFO "Standard 2 point multitouch enabled\n");
+/*
+END
+*/
+
 	/* Read object table. */
 	ret = read_object_table(ts);
 	if (ret < 0)
