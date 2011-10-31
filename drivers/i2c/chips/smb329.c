@@ -18,10 +18,14 @@
 #include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
 #include <mach/htc_battery.h>
 #include <asm/mach-types.h>
 
 static const unsigned short normal_i2c[] = { I2C_CLIENT_END };
+
+int fast_charge_usb;
 
 static int smb329_probe(struct i2c_client *client,
 			const struct i2c_device_id *id);
@@ -199,24 +203,22 @@ int set_charger_ctrl(u32 ctl)
 			, reg_35h, reg_36h, reg_37h);
 		break;
 	case ENABLE_SLOW_CHG:
-		pr_info("Switch charger ON (SLOW)\n");
-		smb329_i2c_write_byte(0x88, 0x31);
-		smb329_i2c_read_byte(&reg_31h, 0x31);
-		smb329_i2c_write_byte(0xD0, 0x01);
-		smb329_i2c_write_byte(0x08, 0x05);
-		smb329_i2c_read_byte(&reg_05h, 0x05);
-		smb329_i2c_read_byte(&reg_00h, 0x00);
-		smb329_i2c_read_byte(&reg_01h, 0x01);
-		smb329_i2c_read_byte(&reg_35h, 0x35);
-		smb329_i2c_read_byte(&reg_36h, 0x36);
-		smb329_i2c_read_byte(&reg_37h, 0x37);
-		pr_info("batt: Switch charger ON (SLOW):"
-			" reg_05h=%x, reg_31h=%x\n", reg_05h, reg_31h);
-		pr_info("batt: Switch charger ON (SLOW) DEBUG:"
-			" reg_00h=%x, reg_01h=%x\n", reg_00h, reg_01h);
-		pr_info("batt: Switch charger ON (SLOW) DEBUG:"
-			" reg_35h=%x, reg_36h=%x, reg_37h=%x\n"
-			, reg_35h, reg_36h, reg_37h);
+			if (fast_charge_usb == 0) {
+				pr_info("Switch charger ON (SLOW)\n");
+				smb329_i2c_write_byte(0x88, 0x31);
+				smb329_i2c_write_byte(0x08, 0x05);
+			}
+			else {
+				pr_info("Switch charger ON (FAST)\n");
+				printk(KERN_INFO "fast charge enabled\n");
+				smb329_i2c_write_byte(0x84, 0x31);
+				smb329_i2c_write_byte(0xD0, 0x01);
+				smb329_i2c_write_byte(0x08, 0x05);
+				smb329_i2c_read_byte(&version, 0x3B);
+				pr_info("Switch charger version%x\n", version);
+				if ((version & 0x18) == 0x0)
+					smb329_i2c_write_byte(0xA9, 0x00);
+			}
 		break;
 	case ENABLE_FAST_CHG:
 		pr_info("Switch charger ON (FAST)\n");
@@ -337,9 +339,52 @@ static struct i2c_driver smb329_driver = {
 	.remove     = smb329_remove,
 };
 
+/* sysfs interface */
+static ssize_t fast_charge_usb_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", fast_charge_usb);
+}
+
+static ssize_t fast_charge_usb_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	sscanf(buf, "%du", &fast_charge_usb);
+	return count;
+}
+
+
+static struct kobj_attribute fast_charge_usb_attribute =
+__ATTR(fast_charge_usb, 0666, fast_charge_usb_show, fast_charge_usb_store);
+
+static struct attribute *attrs[] = {
+	&fast_charge_usb_attribute.attr,
+	NULL,
+};
+
+static struct attribute_group attr_group = {
+	.attrs = attrs,
+};
+
+static struct kobject *fast_charge_usb_kobj;
+
+int fast_charge_usb_init(void)
+{
+int retval;
+
+        fast_charge_usb_kobj = kobject_create_and_add("fast_charge", kernel_kobj);
+        if (!fast_charge_usb_kobj) {
+                return -ENOMEM;
+        }
+        retval = sysfs_create_group(fast_charge_usb_kobj, &attr_group);
+        if (retval)
+                kobject_put(fast_charge_usb_kobj);
+        return retval;
+}
+
 static int __init sensors_smb329_init(void)
 {
     int res;
+
+	fast_charge_usb = 0;
 
 	res = i2c_add_driver(&smb329_driver);
 	if (res) {
@@ -351,6 +396,7 @@ static int __init sensors_smb329_init(void)
 
 static void __exit sensors_smb329_exit(void)
 {
+	kobject_put(fast_charge_usb_kobj);
 	i2c_del_driver(&smb329_driver);
 }
 
@@ -359,4 +405,5 @@ MODULE_DESCRIPTION("smb329 driver");
 MODULE_LICENSE("GPL");
 
 module_init(sensors_smb329_init);
+module_init(fast_charge_usb_init);
 module_exit(sensors_smb329_exit);
