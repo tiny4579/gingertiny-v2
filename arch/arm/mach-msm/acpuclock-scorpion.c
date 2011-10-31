@@ -68,13 +68,13 @@ struct clkctl_acpu_speed {
 
 /* core sources */
 #define SRC_RAW		0 /* clock from SPSS_CLK_CNTL */
-#define SRC_SCPLL	1 /* output of scpll 128-998 MHZ */
+#define SRC_SCPLL	1 /* output of scpll 128-1113 MHZ */
 #define SRC_AXI		2 /* 128 MHz */
 #define SRC_PLL1	3 /* 768 MHz */
 
 struct clkctl_acpu_speed acpu_freq_tbl[] = {
-	{  19200, CCTL(CLK_TCXO, 1),		SRC_RAW, 0, 0, 1050, 14000},
-	{ 128000, CCTL(CLK_TCXO, 1),		SRC_AXI, 0, 0, 1050, 14000 },
+	{  19200, CCTL(CLK_TCXO, 1),		SRC_RAW, 0, 0, 1025, 14000},
+	{ 128000, CCTL(CLK_TCXO, 1),		SRC_AXI, 0, 0, 1025, 14000 },
 	{ 245000, CCTL(CLK_MODEM_PLL, 1),	SRC_RAW, 0, 0, 1050, 29000 },
 	/* Work arround for acpu resume hung, GPLL is turn off by arm9 */
 	/*{ 256000, CCTL(CLK_GLOBAL_PLL, 3),	SRC_RAW, 0, 0, 1050, 29000 },*/
@@ -95,6 +95,9 @@ struct clkctl_acpu_speed acpu_freq_tbl[] = {
 	{ 921600, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x18, 0, 1300, 128000 },
 	{ 960000, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x19, 0, 1300, 128000 },
 	{ 998400, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x1A, 0, 1300, 128000 },
+	{ 1036800, CCTL(CLK_TCXO, 1),           SRC_SCPLL, 0x1B, 0, 1300, 128000 },
+        { 1075200, CCTL(CLK_TCXO, 1),           SRC_SCPLL, 0x1C, 0, 1300, 128000 },
+        { 1113600, CCTL(CLK_TCXO, 1),           SRC_SCPLL, 0x1D, 0, 1300, 128000 },
 	{ 0 },
 };
 static unsigned long max_axi_rate;
@@ -135,7 +138,7 @@ static void __init acpuclk_init_cpufreq_table(void)
 		}
 
 		/* Take the fastest speed available at the specified VDD level */
-		if (vdd != acpu_freq_tbl[i + 1].vdd)
+		/*if (vdd != acpu_freq_tbl[i + 1].vdd)*/
 			freq_table[i].frequency = acpu_freq_tbl[i].acpu_khz;
 	}
 
@@ -310,7 +313,7 @@ int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason)
 
 	DEBUG("acpuclk_set_rate(%d,%d)\n", (int) rate, reason);
 
-	if (rate == cur->acpu_khz || rate == 0)
+	if (rate == 0 || rate == cur->acpu_khz)
 		return 0;
 
 	next = acpu_freq_tbl;
@@ -412,56 +415,10 @@ static int pll_request(unsigned id, unsigned on)
 #define CT_CSR_PHYS             0xA8700000
 #define TCSR_SPARE2_ADDR        (ct_csr_base + 0x60)
 
-void __init acpu_freq_tbl_fixup(void)
-{
-	void __iomem *ct_csr_base;
-	uint32_t tcsr_spare2;
-	unsigned int max_acpu_khz;
-	unsigned int i;
-
-	ct_csr_base = ioremap(CT_CSR_PHYS, PAGE_SIZE);
-	BUG_ON(ct_csr_base == NULL);
-
-	tcsr_spare2 = readl(TCSR_SPARE2_ADDR);
-
-	/* Check if the register is supported and meaningful. */
-	if ((tcsr_spare2 & 0xF000) != 0xA000) {
-		pr_info("Efuse data on Max ACPU freq not present.\n");
-		goto skip_efuse_fixup;
-	}
-
-	switch (tcsr_spare2 & 0xF0) {
-	case 0x70:
-		max_acpu_khz = 768000;
-		break;
-	case 0x30:
-	case 0x00:
-		max_acpu_khz = 998400;
-		break;
-	case 0x10:
-		max_acpu_khz = 1267200;
-		break;
-	default:
-		pr_warning("Invalid efuse data (%x) on Max ACPU freq!\n",
-			tcsr_spare2);
-		goto skip_efuse_fixup;
-	}
-
-	pr_info("Max ACPU freq from efuse data is %d KHz\n", max_acpu_khz);
-
-	for (i = 0; acpu_freq_tbl[i].acpu_khz != 0; i++) {
-		if (acpu_freq_tbl[i].acpu_khz > max_acpu_khz) {
-			acpu_freq_tbl[i].acpu_khz = 0;
-			break;
-		}
-	}
-skip_efuse_fixup:
-	iounmap(ct_csr_base);
-}
 
 static void __init acpuclk_init(void)
 {
-	struct clkctl_acpu_speed *speed;
+	struct clkctl_acpu_speed *speed, *max_s;
 	unsigned init_khz;
 
 	init_khz = acpuclk_find_speed();
@@ -481,15 +438,15 @@ static void __init acpuclk_init(void)
 		BUG();
 	}
 
-	/* Move to 768MHz for boot, which is a safe frequency
+	/* Move to 806MHz for boot, which is a safe frequency
 	 * for all versions of Scorpion at the moment.
 	 */
 	speed = acpu_freq_tbl;
 	for (;;) {
-		if (speed->acpu_khz == 768000)
+		if (speed->acpu_khz == 806400)
 			break;
 		if (speed->acpu_khz == 0) {
-			pr_err("acpuclk_init: cannot find 768MHz\n");
+			pr_err("acpuclk_init: cannot find 806MHz\n");
 			BUG();
 		}
 		speed++;
@@ -514,8 +471,11 @@ static void __init acpuclk_init(void)
 
 	loops_per_jiffy = drv_state.current_speed->lpj;
 
-	speed = acpu_freq_tbl + ARRAY_SIZE(acpu_freq_tbl) - 2;
-	max_axi_rate = speed->axiclk_khz * 1000;
+	for (speed = acpu_freq_tbl; speed->acpu_khz != 0; speed++)
+		;
+
+	max_s = speed - 1;
+	max_axi_rate = max_s->axiclk_khz * 1000;
 }
 
 unsigned long acpuclk_get_max_axi_rate(void)
@@ -570,7 +530,6 @@ void __init msm_acpu_clock_init(struct msm_acpu_clock_platform_data *clkdata)
 	if (clkdata->mpll_khz)
 		acpu_mpll->acpu_khz = clkdata->mpll_khz;
 
-	acpu_freq_tbl_fixup();
 	acpuclk_init();
 	acpuclk_init_cpufreq_table();
 	drv_state.clk_ebi1 = clk_get(NULL,"ebi1_clk");
