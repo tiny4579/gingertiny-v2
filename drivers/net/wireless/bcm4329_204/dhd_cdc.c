@@ -1023,7 +1023,7 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	uint32 dongle_align = DHD_SDALIGN;
 	uint32 glom = 0;
 
-	uint32 nmode = 0;
+	uint32 nmode = 1;
 	uint bcn_timeout = 5;
 /* Disable ARP off-load first
  */
