@@ -19,7 +19,7 @@
 #include <linux/hrtimer.h>
 #include <../../../drivers/staging/android/timed_output.h>
 #include <linux/sched.h>
-
+#include <linux/kthread.h>
 #include <mach/msm_rpcrouter.h>
 #include <mach/msm_rpc_version.h>
 
@@ -30,11 +30,17 @@
 
 #define PM_LIBPROG	  0x30000061
 
-static struct work_struct vibrator_work;
+#define MAX_TIMEOUT 10000
+
+static struct kthread_worker vibrate_worker;
+static struct task_struct *vibrator_task;
+static struct kthread_work vibrator_work;
 static struct hrtimer vibe_timer;
-static spinlock_t vibe_lock;
+// static spinlock_t vibe_lock;
+struct mutex vibe_lock;
 static int vibe_state;
 static int pmic_vibrator_level;
+
 
 static void set_pmic_vibrator(int on)
 {
@@ -67,37 +73,45 @@ static void set_pmic_vibrator(int on)
 		sizeof(req), 5 * HZ);
 
 	if (rc < 0)
-		VIB_ERR_LOG("msm_rpc_call failed (%d)!\n", rc);
+		VIB_ERR_LOG("msm_rpc_call failed!\n");
 	else if (on)
 		pr_info("[ATS][set_vibration][successful]\n");
 }
 
-static void update_vibrator(struct work_struct *work)
+static int vibrator_get_time(struct timed_output_dev *dev)
+{
+        if (hrtimer_active(&vibe_timer)) {
+                ktime_t r = hrtimer_get_remaining(&vibe_timer);
+                return r.tv.sec * 1000 + r.tv.nsec / 1000000;
+        }
+
+	return 0;
+}
+
+static void update_vibrator(struct kthread_work *work)
 {
 	set_pmic_vibrator(vibe_state);
 }
 
 static void vibrator_enable(struct timed_output_dev *dev, int value)
 {
-	unsigned long	flags;
-
+	mutex_lock(&vibe_lock);
 	hrtimer_cancel(&vibe_timer);
-	spin_lock_irqsave(&vibe_lock, flags);
-
-	VIB_INFO_LOG("vibrator_enable, %s(parent:%s): vibrates %d msec\n",
+	flush_kthread_work(&vibrator_work);
+	VIB_INFO_LOG(" %s(parent:%s): vibrates %d msec\n",
 			current->comm, current->parent->comm, value);
-	if (value == 0)
-		vibe_state = 0;
-	else {
-		value = (value > 15000 ? 15000 : value);
-		vibe_state = 1;
-		hrtimer_start(&vibe_timer,
-			ktime_set(value / 1000, (value % 1000) * 1000000),
-			HRTIMER_MODE_REL);
-	}
-	spin_unlock_irqrestore(&vibe_lock, flags);
+	if (value) {
+                value = (value > 15000 ? 15000 : value);
+                vibe_state = 1;
+                hrtimer_start(&vibe_timer,
+                        ktime_set(value / 1000, (value % 1000) * 1000000),
+                        HRTIMER_MODE_REL);
 
-	schedule_work(&vibrator_work);
+	} else {
+                vibe_state = 0;
+		}
+	mutex_unlock(&vibe_lock);
+	queue_kthread_work(&vibrate_worker, &vibrator_work);
 }
 
 static void set_vibrator_level(struct timed_output_dev *dev, int level)
@@ -110,20 +124,11 @@ static int get_vibrator_level(struct timed_output_dev *dev)
 	return pmic_vibrator_level;
 }
 
-static int vibrator_get_time(struct timed_output_dev *dev)
-{
-	if (hrtimer_active(&vibe_timer)) {
-		ktime_t r = hrtimer_get_remaining(&vibe_timer);
-		return r.tv.sec * 1000 + r.tv.nsec / 1000000;
-	} else
-		return 0;
-}
-
 static enum hrtimer_restart vibrator_timer_func(struct hrtimer *timer)
 {
 	VIB_INFO_LOG("%s\n", __func__);
 	vibe_state = 0;
-	schedule_work(&vibrator_work);
+	queue_kthread_work(&vibrate_worker, &vibrator_work);
 	return HRTIMER_NORESTART;
 }
 
@@ -137,17 +142,23 @@ static struct timed_output_dev pmic_vibrator = {
 
 void __init msm_init_pmic_vibrator(int level)
 {
-	INIT_WORK(&vibrator_work, update_vibrator);
-
-	spin_lock_init(&vibe_lock);
-	pmic_vibrator_level = level;
-	vibe_state = 0;
+	struct sched_param param = { .sched_priority = MAX_RT_PRIO-1 };
+	init_kthread_worker(&vibrate_worker);
+	vibrator_task = kthread_run(kthread_worker_fn, &vibrate_worker, "kvibrator");
+	if (IS_ERR(vibrator_task)) {
+		VIB_ERR_LOG("Could not create vibrator task\n");
+		return;
+	}
+	sched_setscheduler(vibrator_task, SCHED_FIFO, &param);
 	hrtimer_init(&vibe_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	vibe_timer.function = vibrator_timer_func;
+	init_kthread_work(&vibrator_work, update_vibrator);
+	mutex_init(&vibe_lock);
+	pmic_vibrator_level = level;
+	vibe_state = 0;
 
 	timed_output_dev_register(&pmic_vibrator);
 }
 
 MODULE_DESCRIPTION("timed output pmic vibrator device");
 MODULE_LICENSE("GPL");
-
