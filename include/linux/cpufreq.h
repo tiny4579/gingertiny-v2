@@ -282,7 +282,7 @@ struct freq_attr {
 
 #define cpufreq_freq_attr_ro(_name)		\
 static struct freq_attr _name =			\
-__ATTR(_name, 0440, show_##_name, NULL)
+__ATTR(_name, 0444, show_##_name, NULL)
 
 #define cpufreq_freq_attr_ro_perm(_name, _perm)	\
 static struct freq_attr _name =			\
@@ -294,7 +294,7 @@ __ATTR(_name, 0444, show_##_name##_old, NULL)
 
 #define cpufreq_freq_attr_rw(_name)		\
 static struct freq_attr _name =			\
-__ATTR(_name, 0640, show_##_name, store_##_name)
+__ATTR(_name, 0644, show_##_name, store_##_name)
 
 #define cpufreq_freq_attr_rw_old(_name)		\
 static struct freq_attr _name##_old =		\
