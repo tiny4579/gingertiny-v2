@@ -18,7 +18,7 @@
 
 #include <mach/board.h>
 
-#define INCREDIBLEC_MIN_UV_MV    (800)  
+#define INCREDIBLEC_MIN_UV_MV    (700)  
 #define INCREDIBLEC_MAX_UV_MV    (1325) 
 
 #define MSM_SMI_BASE		0x02B00000
