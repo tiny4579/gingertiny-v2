@@ -30,7 +30,7 @@
 #include <linux/swapops.h>
 #include <linux/vmalloc.h>
 
-#include "zram_drv.h"
+#include "ramzswap_drv.h"
 
 /* Globals */
 static int ramzswap_major;
