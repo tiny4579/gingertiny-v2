@@ -214,7 +214,7 @@ static void handle_uncompressed_page(struct zram *zram,
 	flush_dcache_page(bio_page);
 }
 
-static void zram_read(struct zram *zram, struct bio *bio)
+static int zram_read(struct zram *zram, struct bio *bio)
 {
 	int i;
 	u32 index;
@@ -222,7 +222,7 @@ static void zram_read(struct zram *zram, struct bio *bio)
 
 	if (unlikely(!zram->init_done)) {
 		bio_endio(bio, -ENXIO);
-		return;
+		return 0;
 	}
 
 	zram_inc_stat(zram, ZRAM_STAT_NUM_READS);
@@ -283,14 +283,14 @@ static void zram_read(struct zram *zram, struct bio *bio)
 
 	set_bit(BIO_UPTODATE, &bio->bi_flags);
 	bio_endio(bio, 0);
-	return;
+	return 0;
 
 out:
 	bio_io_error(bio);
-	return;
+	return 0;
 }
 
-static void zram_write(struct zram *zram, struct bio *bio)
+static int zram_write(struct zram *zram, struct bio *bio)
 {
 	int i, ret;
 	u32 index;
@@ -394,10 +394,11 @@ memstore:
 
 	set_bit(BIO_UPTODATE, &bio->bi_flags);
 	bio_endio(bio, 0);
-	return;
+	return 0;
 
 out:
 	bio_io_error(bio);
+	return 0;
 }
 
 static void zram_discard(struct zram *zram, struct bio *bio)
@@ -436,6 +437,7 @@ static inline int valid_io_request(struct zram *zram, struct bio *bio)
  */
 static int zram_make_request(struct request_queue *queue, struct bio *bio)
 {
+	int ret = 0;
 	struct zram *zram = queue->queuedata;
 
 	if (unlikely(!valid_io_request(zram, bio))) {
@@ -452,15 +454,15 @@ static int zram_make_request(struct request_queue *queue, struct bio *bio)
 
 	switch (bio_data_dir(bio)) {
 	case READ:
-		zram_read(zram, bio);
+		ret = zram_read(zram, bio);
 		break;
 
 	case WRITE:
-		zram_write(zram, bio);
+		ret = zram_write(zram, bio);
 		break;
 	}
 
-	return 0;
+	return ret;
 }
 
 void zram_reset_device(struct zram *zram)
