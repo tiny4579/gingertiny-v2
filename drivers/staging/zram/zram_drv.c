@@ -684,8 +684,7 @@ fail:
 	return ret;
 }
 
-static void zram_slot_free_notify(struct block_device *bdev,
-				unsigned long index)
+void zram_slot_free_notify(struct block_device *bdev, unsigned long index)
 {
 	struct zram *zram;
 
