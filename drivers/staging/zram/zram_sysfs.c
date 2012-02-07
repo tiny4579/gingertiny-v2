@@ -17,6 +17,8 @@
 
 #include "zram_drv.h"
 
+#ifdef CONFIG_SYSFS
+
 /*
  * Individual percpu values can go negative but the sum across all CPUs
  * must always be positive (we store various counts). So, return sum as
@@ -248,3 +250,4 @@ struct attribute_group zram_disk_attr_group = {
 	.attrs = zram_disk_attrs,
 };
 
+#endif	/* CONFIG_SYSFS */
