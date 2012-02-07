@@ -112,8 +112,7 @@ struct ramzswap {
 	void *compress_buffer;
 	struct table *table;
 	spinlock_t stat64_lock;	/* protect 64-bit stats */
-	struct mutex lock;	/* protect compression buffers against
-				 * concurrent writes */
+	struct mutex lock;
 	struct request_queue *queue;
 	struct gendisk *disk;
 	int init_done;
