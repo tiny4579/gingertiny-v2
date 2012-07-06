@@ -27,10 +27,20 @@ static const unsigned short normal_i2c[] = { I2C_CLIENT_END };
 
 int fast_charge_usb;
 
+/**
+ * 0 is no charger, 1 is USB charger, 2 is wall charger.
+ */
+int charger_active=0;
+
+/**
+ * Insmod parameters
+ */
+I2C_CLIENT_INSMOD_1(smb329);
+
 static int smb329_probe(struct i2c_client *client,
 			const struct i2c_device_id *id);
-/* static int smb329_detect(struct i2c_client *client, int kind,
-			 struct i2c_board_info *info); */
+static int smb329_detect(struct i2c_client *client, int kind,
+			 struct i2c_board_info *info);
 static int smb329_remove(struct i2c_client *client);
 
 
@@ -169,98 +179,42 @@ static int smb329_i2c_read_byte(u8 *value, u8 reg)
 	return result;
 }
 
+void smb329_charger_enable(int fast_charge)
+{
+	u8 version;
+
+	if(fast_charge == 0) {
+		pr_info("Switch charger ON (SLOW)\n");
+		smb329_i2c_write_byte(0x88, 0x31);
+		smb329_i2c_write_byte(0x08, 0x05);
+	} else {
+		pr_info("Switch charger ON (FAST)\n");
+		smb329_i2c_write_byte(0x84, 0x31);
+		smb329_i2c_write_byte(0xD0, 0x01);
+		smb329_i2c_write_byte(0x08, 0x05);
+		smb329_i2c_read_byte(&version, 0x3B);
+		pr_info("Switch charger version %x\n", version);
+		if ((version & 0x18) == 0x0)
+			smb329_i2c_write_byte(0xA9, 0x00);
+	}
+}
+
 int set_charger_ctrl(u32 ctl)
 {
 	int result = 0;
-    u8 version;
-	u8 reg_00h;
-	u8 reg_01h;
-	u8 reg_05h;
-	u8 reg_31h;
-	u8 reg_33h;
-	u8 reg_35h;
-	u8 reg_36h;
-	u8 reg_37h;
 
 	switch (ctl) {
 	case DISABLE:
-		pr_info("batt: Switch charger OFF\n");
-		smb329_i2c_read_byte(&reg_00h, 0x00);
-		smb329_i2c_read_byte(&reg_01h, 0x01);
-		smb329_i2c_read_byte(&reg_05h, 0x05);
-		smb329_i2c_read_byte(&reg_31h, 0x31);
-		smb329_i2c_read_byte(&reg_33h, 0x33);
-		smb329_i2c_read_byte(&reg_35h, 0x35);
-		smb329_i2c_read_byte(&reg_36h, 0x36);
-		smb329_i2c_read_byte(&reg_37h, 0x37);
-		pr_info("batt: Switch charger ON (SLOW):"
-			" reg_05h=%x, reg_31h=%x\n", reg_05h, reg_31h);
-		pr_info("batt: Switch charger ON (SLOW) DEBUG:"
-			" reg_00h=%x, reg_01h=%x, reg_33h=%x\n"
-			, reg_00h, reg_01h, reg_33h);
-		pr_info("batt: Switch charger ON (SLOW) DEBUG:"
-			" reg_35h=%x, reg_36h=%x, reg_37h=%x\n"
-			, reg_35h, reg_36h, reg_37h);
+		charger_active=0;
+		pr_info("Switch charger OFF\n");
 		break;
 	case ENABLE_SLOW_CHG:
-			if (fast_charge_usb == 0) {
-				pr_info("Switch charger ON (SLOW)\n");
-				smb329_i2c_write_byte(0x88, 0x31);
-				smb329_i2c_write_byte(0x08, 0x05);
-			}
-			else {
-				pr_info("Switch charger ON (FAST)\n");
-				printk(KERN_INFO "fast charge enabled\n");
-				smb329_i2c_write_byte(0x84, 0x31);
-				smb329_i2c_write_byte(0xD0, 0x01);
-				smb329_i2c_write_byte(0x08, 0x05);
-				smb329_i2c_read_byte(&version, 0x3B);
-				pr_info("Switch charger version%x\n", version);
-				if ((version & 0x18) == 0x0)
-					smb329_i2c_write_byte(0xA9, 0x00);
-			}
+		charger_active=1;
+		smb329_charger_enable(fast_charge_usb);
 		break;
 	case ENABLE_FAST_CHG:
-		pr_info("Switch charger ON (FAST)\n");
-		smb329_i2c_write_byte(0x84, 0x31);
-		smb329_i2c_read_byte(&reg_31h, 0x31);
-		smb329_i2c_write_byte(0xD0, 0x01);
-		smb329_i2c_write_byte(0x08, 0x05);
-		smb329_i2c_write_byte(0xA9, 0x00);
-		smb329_i2c_read_byte(&reg_05h, 0x05);
-		smb329_i2c_read_byte(&version, 0x3B);
-		smb329_i2c_read_byte(&reg_00h, 0x00);
-		smb329_i2c_read_byte(&reg_01h, 0x01);
-		smb329_i2c_read_byte(&reg_35h, 0x35);
-		smb329_i2c_read_byte(&reg_36h, 0x36);
-		smb329_i2c_read_byte(&reg_37h, 0x37);
-		pr_info("batt: Switch charger ON (FAST):"
-			" reg_05h=%x, reg_31h=%x, version=%x\n"
-			, reg_05h, reg_31h, version);
-		pr_info("batt: Switch charger ON (FAST) DEBUG:"
-			" reg_00h=%x, reg_01h=%x\n", reg_00h, reg_01h);
-		pr_info("batt: Switch charger ON (FAST) DEBUG:"
-			" reg_35h=%x, reg_36h=%x, reg_37h=%x\n"
-			, reg_35h, reg_36h, reg_37h);
-		break;
-	case CHARGER_CHK:
-		pr_info("batt: Switch charger CHECK\n");
-		smb329_i2c_read_byte(&reg_00h, 0x00);
-		smb329_i2c_read_byte(&reg_01h, 0x01);
-		smb329_i2c_read_byte(&reg_05h, 0x05);
-		smb329_i2c_read_byte(&reg_31h, 0x31);
-		smb329_i2c_read_byte(&reg_33h, 0x33);
-		smb329_i2c_read_byte(&reg_35h, 0x35);
-		smb329_i2c_read_byte(&reg_36h, 0x36);
-		smb329_i2c_read_byte(&reg_37h, 0x37);
-		pr_info("batt: Switch charger ON (SLOW):"
-			" reg_05h=%x, reg_31h=%x\n", reg_05h, reg_31h);
-		pr_info("batt: Switch charger ON (SLOW) DEBUG:"
-			" reg_00h=%x, reg_01h=%x, reg_33h=%x\n"
-			, reg_00h, reg_01h, reg_33h);
-		pr_info("batt: Switch charger ON (SLOW) DEBUG:"
-			" reg_35h=%x, reg_36h=%x, reg_37h=%x\n"
-			, reg_35h, reg_36h, reg_37h);
+		charger_active=2;
+		smb329_charger_enable(1);
 		break;
 	default:
 		pr_info("%s: Not supported battery ctr called.!", __func__);
@@ -275,7 +229,7 @@ static int cable_status_handler_func(struct notifier_block *nfb,
 		unsigned long action, void *param)
 {
 	u32 ctl = (u32)action;
-	pr_info("Switch charger set control%d\n", ctl);
+	pr_info("Switch charger set control %d\n", ctl);
 	set_charger_ctrl(ctl);
 
 	return NOTIFY_OK;
@@ -285,7 +239,6 @@ static struct notifier_block cable_status_handler = {
 	.notifier_call = cable_status_handler_func,
 };
 
-#if 0
 static int smb329_detect(struct i2c_client *client, int kind,
 			 struct i2c_board_info *info)
 {
@@ -298,19 +251,17 @@ static int smb329_detect(struct i2c_client *client, int kind,
 
 	return 0;
 }
-#endif
 
 static int smb329_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	struct smb329_i2c_client   *data = &smb329_i2c_module;
 
-	if (i2c_check_functionality(client->adapter, I2C_FUNC_I2C) == 0) {
+    if (i2c_check_functionality(client->adapter, I2C_FUNC_I2C) == 0) {
 		dev_dbg(&client->dev, "[SMB329]:I2C fail\n");
 		return -EIO;
-	}
-	if (machine_is_incrediblec() || (machine_is_supersonic()
-	    && (system_rev < 1)))
+		}
+	if (machine_is_incrediblec())
 		register_notifier_cable_status(&cable_status_handler);
 
 	data->address = client->addr;
@@ -323,6 +274,7 @@ static int smb329_probe(struct i2c_client *client,
 static int smb329_remove(struct i2c_client *client)
 {
 	struct smb329_i2c_client   *data = i2c_get_clientdata(client);
+	int idx;
 	if (data->client && data->client != client)
 		i2c_unregister_device(data->client);
 	smb329_i2c_module.client = NULL;
@@ -348,6 +300,11 @@ static ssize_t fast_charge_usb_show(struct kobject *kobj, struct kobj_attribute 
 static ssize_t fast_charge_usb_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
 {
 	sscanf(buf, "%du", &fast_charge_usb);
+	
+	/* If USB charger is active, apply the new setting immediately. */
+	if(charger_active == 1){
+		smb329_charger_enable(fast_charge_usb);
+	}
 	return count;
 }
 
