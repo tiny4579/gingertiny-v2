@@ -25,7 +25,7 @@
 
 static const unsigned short normal_i2c[] = { I2C_CLIENT_END };
 
-int fast_charge_usb;
+int force_fast_charge;
 
 /**
  * 0 is no charger, 1 is USB charger, 2 is wall charger.
@@ -210,7 +210,7 @@ int set_charger_ctrl(u32 ctl)
 		break;
 	case ENABLE_SLOW_CHG:
 		charger_active=1;
-		smb329_charger_enable(fast_charge_usb);
+		smb329_charger_enable(force_fast_charge);
 		break;
 	case ENABLE_FAST_CHG:
 		charger_active=2;
@@ -292,28 +292,28 @@ static struct i2c_driver smb329_driver = {
 };
 
 /* sysfs interface */
-static ssize_t fast_charge_usb_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+static ssize_t force_fast_charge_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%d\n", fast_charge_usb);
+	return sprintf(buf, "%d\n", force_fast_charge);
 }
 
-static ssize_t fast_charge_usb_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
+static ssize_t force_fast_charge_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
 {
-	sscanf(buf, "%du", &fast_charge_usb);
+	sscanf(buf, "%du", &force_fast_charge);
 	
 	/* If USB charger is active, apply the new setting immediately. */
 	if(charger_active == 1){
-		smb329_charger_enable(fast_charge_usb);
+		smb329_charger_enable(force_fast_charge);
 	}
 	return count;
 }
 
 
-static struct kobj_attribute fast_charge_usb_attribute =
-__ATTR(fast_charge_usb, 0666, fast_charge_usb_show, fast_charge_usb_store);
+static struct kobj_attribute force_fast_charge_attribute =
+__ATTR(force_fast_charge, 0666, force_fast_charge_show, force_fast_charge_store);
 
 static struct attribute *attrs[] = {
-	&fast_charge_usb_attribute.attr,
+	&force_fast_charge_attribute.attr,
 	NULL,
 };
 
@@ -321,19 +321,19 @@ static struct attribute_group attr_group = {
 	.attrs = attrs,
 };
 
-static struct kobject *fast_charge_usb_kobj;
+static struct kobject *force_fast_charge_kobj;
 
-int fast_charge_usb_init(void)
+int force_fast_charge_init(void)
 {
 int retval;
 
-        fast_charge_usb_kobj = kobject_create_and_add("fast_charge", kernel_kobj);
-        if (!fast_charge_usb_kobj) {
+        force_fast_charge_kobj = kobject_create_and_add("fast_charge", kernel_kobj);
+        if (!force_fast_charge_kobj) {
                 return -ENOMEM;
         }
-        retval = sysfs_create_group(fast_charge_usb_kobj, &attr_group);
+        retval = sysfs_create_group(force_fast_charge_kobj, &attr_group);
         if (retval)
-                kobject_put(fast_charge_usb_kobj);
+                kobject_put(force_fast_charge_kobj);
         return retval;
 }
 
@@ -341,7 +341,7 @@ static int __init sensors_smb329_init(void)
 {
     int res;
 
-	fast_charge_usb = 0;
+	force_fast_charge = 0;
 
 	res = i2c_add_driver(&smb329_driver);
 	if (res) {
@@ -353,7 +353,7 @@ static int __init sensors_smb329_init(void)
 
 static void __exit sensors_smb329_exit(void)
 {
-	kobject_put(fast_charge_usb_kobj);
+	kobject_put(force_fast_charge_kobj);
 	i2c_del_driver(&smb329_driver);
 }
 
@@ -362,5 +362,5 @@ MODULE_DESCRIPTION("smb329 driver");
 MODULE_LICENSE("GPL");
 
 module_init(sensors_smb329_init);
-module_init(fast_charge_usb_init);
+module_init(force_fast_charge_init);
 module_exit(sensors_smb329_exit);
