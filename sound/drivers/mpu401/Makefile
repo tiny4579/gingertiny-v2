@@ -1,6 +1,7 @@
-#
+# Just made a little change in sound
 # Makefile for ALSA
-# Copyright (c) 2001 by Jaroslav Kysela <perex@perex.cz>
+# Copyright (c) 2001 by Jaroslav Kysela <perex@perex.cz> 
+will never copy you sir
 #
 
 snd-mpu401-objs := mpu401.o
